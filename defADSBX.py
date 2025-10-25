@@ -89,3 +89,26 @@ def pull_date_ras(date):
     else:
         data = None
     return data
+inline auto SegmentAllocator::Allocate(uint32_t size) -> std::pair<Ptr, uint8_t*> {
+  void* ptr = mi_heap_malloc(heap_, size);
+  if (!ptr)
+    throw std::bad_alloc{};
+
+  uint64_t iptr = (uint64_t)ptr;
+  uint64_t seg_ptr = iptr & kSegmentAlignMask;
+
+  // could be speed up using last used seg_ptr.
+  auto [it, inserted] = rev_indx_.emplace(seg_ptr, address_table_.size());
+  if (inserted) {
+    ValidateMapSize();
+    address_table_.push_back((uint8_t*)seg_ptr);
+  }
+
+  uint32_t seg_offset = (iptr - seg_ptr) / 8;
+  Ptr res = (seg_offset << kSegmentIdBits) | it->second;
+  used_ += mi_good_size(size);
+
+  return std::make_pair(res, (uint8_t*)ptr);
+}
+
+}  // namespace dfl
